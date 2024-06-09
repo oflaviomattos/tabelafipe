@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Consulta FIPE</title>
-    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
     <style>
-        label, input {
+        label, select, input {
             display: block;
             margin: 8px 0;
         }
@@ -16,74 +15,103 @@
     <h1>Consulta FIPE</h1>
     <form id="fipe-form">
         <label for="brand">Marca:</label>
-        <input id="brand" type="text" name="brand">
+        <select id="brand" name="brand">
+            <option value="">Selecione uma marca</option>
+        </select>
 
         <label for="model">Modelo:</label>
-        <input id="model" type="text" name="model">
+        <select id="model" name="model" disabled>
+            <option value="">Selecione um modelo</option>
+        </select>
 
         <label for="year">Ano:</label>
-        <input id="year" type="text" name="year">
+        <select id="year" name="year" disabled>
+            <option value="">Selecione um ano</option>
+        </select>
 
-        <button type="submit">Consultar Preço</button>
+        <button type="submit" disabled>Consultar Preço</button>
     </form>
 
     <div id="result"></div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
     <script>
         $(document).ready(function() {
-            // Autocomplete para Marcas
-            $("#brand").autocomplete({
-                source: async function(request, response) {
-                    const res = await fetch('https://brasilapi.com.br/api/fipe/marcas/v1/carros');
-                    const brands = await res.json();
-                    const filteredBrands = brands.filter(brand => brand.nome.toLowerCase().includes(request.term.toLowerCase()));
-                    response(filteredBrands.map(brand => ({ label: brand.nome, value: brand.codigo })));
-                },
-                select: function(event, ui) {
-                    $("#brand").val(ui.item.label);
-                    $("#brand").data("brandCode", ui.item.value);
-                    return false;
+            // Função para obter as marcas
+            async function fetchBrands() {
+                const res = await fetch('https://parallelum.com.br/fipe/api/v1/carros/marcas');
+                const brands = await res.json();
+                return brands;
+            }
+
+            // Função para obter os modelos de uma marca específica
+            async function fetchModels(brandId) {
+                const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${brandId}/modelos`);
+                const models = await res.json();
+                return models.modelos;
+            }
+
+            // Função para obter os anos de um modelo específico
+            async function fetchYears(brandId, modelId) {
+                const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${brandId}/modelos/${modelId}/anos`);
+                const years = await res.json();
+                return years;
+            }
+
+            // Preenche o select de marcas
+            async function populateBrands() {
+                const brands = await fetchBrands();
+                const brandSelect = $("#brand");
+                brands.forEach(brand => {
+                    brandSelect.append(new Option(brand.nome, brand.codigo));
+                });
+            }
+
+            // Evento de mudança no select de marcas
+            $("#brand").change(async function() {
+                const brandId = $(this).val();
+                if (!brandId) {
+                    $("#model").prop("disabled", true).empty().append(new Option("Selecione um modelo", ""));
+                    $("#year").prop("disabled", true).empty().append(new Option("Selecione um ano", ""));
+                    $("button[type=submit]").prop("disabled", true);
+                    return;
                 }
+
+                const models = await fetchModels(brandId);
+                const modelSelect = $("#model").prop("disabled", false).empty().append(new Option("Selecione um modelo", ""));
+                models.forEach(model => {
+                    modelSelect.append(new Option(model.nome, model.codigo));
+                });
+
+                $("#year").prop("disabled", true).empty().append(new Option("Selecione um ano", ""));
+                $("button[type=submit]").prop("disabled", true);
             });
 
-            // Autocomplete para Modelos
-            $("#model").autocomplete({
-                source: async function(request, response) {
-                    const brandCode = $("#brand").data("brandCode");
-                    if (!brandCode) return;
-
-                    const res = await fetch(`https://brasilapi.com.br/api/fipe/modelos/v1/${brandCode}`);
-                    const data = await res.json();
-                    const models = data.modelos;
-                    const filteredModels = models.filter(model => model.nome.toLowerCase().includes(request.term.toLowerCase()));
-                    response(filteredModels.map(model => ({ label: model.nome, value: model.codigo })));
-                },
-                select: function(event, ui) {
-                    $("#model").val(ui.item.label);
-                    $("#model").data("modelCode", ui.item.value);
-                    return false;
+            // Evento de mudança no select de modelos
+            $("#model").change(async function() {
+                const brandId = $("#brand").val();
+                const modelId = $(this).val();
+                if (!modelId) {
+                    $("#year").prop("disabled", true).empty().append(new Option("Selecione um ano", ""));
+                    $("button[type=submit]").prop("disabled", true);
+                    return;
                 }
+
+                const years = await fetchYears(brandId, modelId);
+                const yearSelect = $("#year").prop("disabled", false).empty().append(new Option("Selecione um ano", ""));
+                years.forEach(year => {
+                    yearSelect.append(new Option(year.nome, year.codigo));
+                });
+
+                $("button[type=submit]").prop("disabled", true);
             });
 
-            // Autocomplete para Anos
-            $("#year").autocomplete({
-                source: async function(request, response) {
-                    const brandCode = $("#brand").data("brandCode");
-                    const modelCode = $("#model").data("modelCode");
-                    if (!brandCode || !modelCode) return;
-
-                    const res = await fetch(`https://brasilapi.com.br/api/fipe/modelos/v1/${brandCode}`);
-                    const data = await res.json();
-                    const anos = data.anos;
-                    const filteredYears = anos.filter(year => year.nome.toLowerCase().includes(request.term.toLowerCase()));
-                    response(filteredYears.map(year => ({ label: year.nome, value: year.codigo })));
-                },
-                select: function(event, ui) {
-                    $("#year").val(ui.item.label);
-                    $("#year").data("yearCode", ui.item.value);
-                    return false;
+            // Evento de mudança no select de anos
+            $("#year").change(function() {
+                if ($(this).val()) {
+                    $("button[type=submit]").prop("disabled", false);
+                } else {
+                    $("button[type=submit]").prop("disabled", true);
                 }
             });
 
@@ -91,23 +119,26 @@
             $("#fipe-form").submit(async function(event) {
                 event.preventDefault();
 
-                const brandCode = $("#brand").data("brandCode");
-                const modelCode = $("#model").data("modelCode");
-                const yearCode = $("#year").data("yearCode");
+                const brandId = $("#brand").val();
+                const modelId = $("#model").val();
+                const yearId = $("#year").val();
 
-                if (!brandCode || !modelCode || !yearCode) {
+                if (!brandId || !modelId || !yearId) {
                     alert("Por favor, selecione uma marca, modelo e ano válidos.");
                     return;
                 }
 
-                const res = await fetch(`https://brasilapi.com.br/api/fipe/preco/v1/${brandCode}/${modelCode}/${yearCode}`);
+                const res = await fetch(`https://parallelum.com.br/fipe/api/v1/carros/marcas/${brandId}/modelos/${modelId}/anos/${yearId}`);
                 const priceData = await res.json();
 
                 $("#result").html(`
                     <h2>Preço:</h2>
-                    <p>${priceData.precoMedio}</p>
+                    <p>${priceData.Valor}</p>
                 `);
             });
+
+            // Popula o select de marcas ao carregar a página
+            populateBrands();
         });
     </script>
 </body>
